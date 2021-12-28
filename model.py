@@ -1,6 +1,6 @@
 from Layers.Discriminator import Discriminator
 from Layers.Generators import Generator
-
+import time
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from tensorflow.keras.layers import BatchNormalization, Activation, ZeroPadding2D
@@ -11,87 +11,110 @@ from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import sys
 import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import PIL
+from tensorflow.keras import layers
+import time
+
+from IPython import display
+
+
+# You will reuse this seed overtime (so it's easier)
+# to visualize progress in the animated GIF)
+
+
+
+def train_step(images, generator, discriminator,generator_model,discriminator_model):
+    EPOCHS = 50
+    noise_dim = 100
+    num_examples_to_generate = 16
+    BUFFER_SIZE = 60000
+    BATCH_SIZE = 256
+    generator_optimizer = tf.keras.optimizers.Adam(1e-4)
+    discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
+    noise = tf.random.normal([BATCH_SIZE, noise_dim])
+
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+        generated_images = generator_model(noise, training=True)
+
+        real_output = discriminator_model(images, training=True)
+        fake_output = discriminator_model(generated_images, training=True)
+
+        gen_loss = generator.generator_loss(fake_output)
+        disc_loss = discriminator.discriminator_loss(real_output, fake_output)
+
+    gradients_of_generator = gen_tape.gradient(gen_loss, generator_model.trainable_variables)
+    gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator_model.trainable_variables)
+
+    generator_optimizer.apply_gradients(zip(gradients_of_generator, generator_model.trainable_variables))
+    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator_model.trainable_variables))
 
 
 class DCGAN():
-    def __init__(self, imageShape, latentShape):
-        self.imageShape = imageShape
+    def __init__(self, latentShape):
+
         self.latentShape = latentShape
-        self.generator = Generator(self.imageShape, self.latentShape)
-        self.generator = self.generator.BuildModel()
-        self.discriminator = Discriminator(self.imageShape)
-        self.discriminator = self.discriminator.BuildModel()
-        self.discriminator.compile(loss='binary_crossentropy',
-                                   optimizer=Adam(0.0002, 0.5),
-                                   metrics=['accuracy'])
+
+
+        self.num_examples_to_generate = 16
+        self.BUFFER_SIZE = 60000
+        self.EPOCHS = 50
+        self.seed = tf.random.normal([self.num_examples_to_generate, latentShape])
 
         # Build the generator
         # The generator takes noise as input and generates imgs
-        z = Input(shape=(self.latentShape,))
-        img = self.generator(z)
+        self.generator = Generator()
+        self.generator_model = self.generator.BuildModel()
+
+        noise = tf.random.normal([1, 100])
+        generated_image = self.generator_model(noise, training=False)
 
         # For the combined model we will only train the generator
-        self.discriminator.trainable = False
 
         # The discriminator takes generated images as input and determines validity
-        valid = self.discriminator(img)
+        self.discriminator = Discriminator()
+        self.discriminator_model = self.discriminator.BuildModel()
+        decision = self.discriminator_model(generated_image)
 
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
-        self.combined = Model(z, valid)
-        self.combined.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
 
-    def fit(self, xTrain, epochs, batch_size=128, save_interval=50):
-        # Adversarial ground truths
-        valid = np.ones((batch_size, 1))
-        fake = np.zeros((batch_size, 1))
+
+    def generate_and_save_images(self, model, epoch, test_input):
+        # Notice `training` is set to False.
+        # This is so all layers run in inference mode (batchnorm).
+        predictions = model(test_input, training=False)
+
+        fig = plt.figure(figsize=(4, 4))
+
+        for i in range(predictions.shape[0]):
+            plt.subplot(4, 4, i + 1)
+            plt.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
+            plt.axis('off')
+
+        plt.savefig("images/mnist_%d.png" % epoch)
+        plt.close
+
+    def train(self, dataset, epochs):
         for epoch in range(epochs):
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
+            start = time.time()
 
-            # Select a random half of images
-            idx = np.random.randint(0, xTrain.shape[0], batch_size)
-            imgs = xTrain[idx]
+            for image_batch in dataset:
+                train_step(image_batch,self.generator,self.discriminator,self.generator_model,self.discriminator_model)
 
-            # Sample noise and generate a batch of new images
-            noise = np.random.normal(0, 1, (batch_size, self.latentShape))
-            gen_imgs = self.generator.predict(noise)
+            # Produce images for the GIF as you go
+            display.clear_output(wait=True)
+            self.generate_and_save_images(self.generator_model,
+                                          epoch + 1,
+                                          self.seed)
 
-            # Train the discriminator (real classified as ones and generated as zeros)
-            d_loss_real = self.discriminator.train_on_batch(imgs, valid)
-            d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            print('Time for epoch {} is {} sec'.format(epoch + 1, time.time() - start))
 
-            # ---------------------
-            #  Train Generator
-            # ---------------------
-
-            # Train the generator (wants discriminator to mistake images as real)
-            g_loss = self.combined.train_on_batch(noise, valid)
-
-            # Plot the progress
-            print("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100 * d_loss[1], g_loss))
-
-            # If at save interval => save generated image samples
-            if epoch % save_interval == 0:
-                self.save_imgs(epoch)
-
-    def save_imgs(self, epoch):
-            r, c = 5, 5
-            noise = np.random.normal(0, 1, (r * c, self.latentShape))
-            gen_imgs = self.generator.predict(noise)
-
-            # Rescale images 0 - 1
-            gen_imgs = 0.5 * gen_imgs + 0.5
-            fig, axs = plt.subplots(r, c)
-            cnt = 0
-
-            for i in range(r):
-                for j in range(c):
-                    axs[i, j].imshow(gen_imgs[cnt, :, :, 0], cmap='gray')
-                    axs[i, j].axis('off')
-                    cnt += 1
-
-            fig.savefig("images/mnist_%d.png" % epoch)
-            plt.close
+        # Generate after the final epoch
+        display.clear_output(wait=True)
+        self.generate_and_save_images(self.generator_model,
+                                      epochs,
+                                      self.seed)

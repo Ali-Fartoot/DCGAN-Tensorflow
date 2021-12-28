@@ -1,6 +1,6 @@
 from model import DCGAN
 
-
+import tensorflow as tf
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from tensorflow.keras.layers import BatchNormalization, Activation, ZeroPadding2D
@@ -15,13 +15,16 @@ import numpy as np
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    # Load the dataset
-    (X_train, _), (_, _) = mnist.load_data()
-    # Rescale -1 to 1
-    X_train = X_train / 127.5 - 1.
-    X_train = np.expand_dims(X_train, axis=3)
-    print(X_train.shape[0])
-    dcgan = DCGAN(imageShape=(X_train.shape[1],X_train.shape[2],X_train.shape[3]),latentShape=100)
-    dcgan.fit(xTrain=X_train,epochs=4000, batch_size=32, save_interval=50)
+    (train_images, train_labels), (_, _) = tf.keras.datasets.mnist.load_data()
+    train_images = train_images.reshape(train_images.shape[0], 28, 28, 1).astype('float32')
+    train_images = (train_images - 127.5) / 127.5  # Normalize the images to [-1, 1]
+
+    BUFFER_SIZE = 60000
+    BATCH_SIZE = 256
+    # Batch and shuffle the data
+    train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+    dcgan = DCGAN(latentShape=100)
+    dcgan.train(train_dataset, 50)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

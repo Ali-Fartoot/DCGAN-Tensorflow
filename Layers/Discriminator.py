@@ -9,38 +9,32 @@ from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import sys
 import numpy as np
-
+from tensorflow.keras import layers
+import tensorflow as tf
 
 class Discriminator():
-    def __init__(self, imageShape):
-        self.imageShape = imageShape
-
+    def __init__(self):
+        self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
     def BuildModel(self):
         model = Sequential(name="Discriminator")
-        model.add(Conv2D(32, kernel_size=3, strides=2, input_shape=self.imageShape, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(64, kernel_size=3, strides=2, padding="same"))
-        model.add(ZeroPadding2D(padding=((0,1),(0,1))))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(128, kernel_size=3, strides=2, padding="same"))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(256, kernel_size=3, strides=1, padding="same"))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Flatten())
-        model.add(Dense(1, activation='sigmoid'))
-        model.summary()
 
-        img = Input(shape=self.imageShape)
-        validity = model(img)
-        return Model(img, validity)
+        model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same',
+                                input_shape=[28, 28, 1]))
+        model.add(layers.LeakyReLU())
+        model.add(layers.Dropout(0.3))
 
+        model.add(layers.Conv2D(128, (5, 5), strides=(2, 2), padding='same'))
+        model.add(layers.LeakyReLU())
+        model.add(layers.Dropout(0.3))
 
+        model.add(layers.Flatten())
+        model.add(layers.Dense(1))
+        print(model.summary())
+        return model
 
+    def discriminator_loss(self,real_output, fake_output):
+        real_loss = self.cross_entropy(tf.ones_like(real_output), real_output)
+        fake_loss = self.cross_entropy(tf.zeros_like(fake_output), fake_output)
+        total_loss = real_loss + fake_loss
+        return total_loss
