@@ -1,14 +1,4 @@
-
-from tensorflow.keras.datasets import mnist
-from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Dropout
-from tensorflow.keras.layers import BatchNormalization, Activation, ZeroPadding2D
-from tensorflow.keras.layers import LeakyReLU
-from tensorflow.keras.layers import UpSampling2D, Conv2D, Conv2DTranspose
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.optimizers import Adam
-import matplotlib.pyplot as plt
-import sys
-import numpy as np
+from tensorflow.keras.models import Sequential
 from tensorflow.keras import layers
 import tensorflow as tf
 
@@ -16,6 +6,7 @@ import tensorflow as tf
 class Generator():
     def __init__(self):
         self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
     def BuildModel(self):
         model = Sequential(name="Generator")
         model.add(layers.Dense(7 * 7 * 256, use_bias=False, input_shape=(100,)))
@@ -40,7 +31,5 @@ class Generator():
         print(model.summary())
         return model
 
-    def generator_loss(self,fake_output):
+    def GeneratorLoss(self, fake_output):
         return self.cross_entropy(tf.ones_like(fake_output), fake_output)
-
-
